@@ -32,4 +32,5 @@ setup(
     ],
     keywords="datacamp python online-course jupyter binder",
     python_requires=">=3.7",
+    entry_points={"console_scripts": ["decampy=decampy.cli:main"]},
 )
