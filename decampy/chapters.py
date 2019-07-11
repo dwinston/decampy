@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Tuple
@@ -58,7 +59,7 @@ id: {n}
     )
 
 
-def create_chapter(n: int, lines: FileLines, basepath: Path) -> Dict[Path, str]:
+def create_chapter(n: int, lines: FileLines, basepaths: Tuple[Path]) -> Dict[Path, str]:
     """
     Given the text (via lines) of chapter n, create a mapping of file paths to generated file contents.
 
@@ -67,21 +68,23 @@ def create_chapter(n: int, lines: FileLines, basepath: Path) -> Dict[Path, str]:
     Args:
         n (int): The chapter number.
         lines (FileLines): Each line of the input file.
-        basepath (Path): the directory where output files should go.
+        basepaths (Tuple[Path]): the input and output directories
 
     Returns:
         Dict[Path,str]: A mapping of intended file paths to intended file contents.
 
     """
+    basepath_in, basepath_out = basepaths
     frontmatter, lines_remaining = get_frontmatter(n, lines)
     n_exercise = 1
-    chapter_path = basepath.joinpath("chapters", f"chapter{n}.md")
+    chapter_path = basepath_out.joinpath("chapters", f"chapter{n}.md")
     processed = {chapter_path: frontmatter}
     while lines_remaining:
         processed_exercise, lines_remaining = get_exercise(
-            n=n_exercise, n_chapter=n, lines=lines_remaining
+            n=n_exercise, n_chapter=n, lines=lines_remaining, basepaths=basepaths
         )
         processed[chapter_path] += processed_exercise.pop(chapter_path, "")
         processed.update(processed_exercise)
         n_exercise += 1
+    logging.debug(f"Done processing chapter {n}")
     return processed

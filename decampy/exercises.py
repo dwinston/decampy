@@ -1,11 +1,60 @@
+import logging
 from pathlib import Path
 from typing import Tuple, Dict
 
 from decampy.util import FileLines
 
+exercise_types = {"videoexercise": "slides"}
+
+
+def get_slides(lines: FileLines) -> str:
+    """
+    Get the string content for an output slides file.
+    Args:
+        lines (FileLines): All lines of the input slides file.
+
+    Returns:
+        str: content of output slides file.
+
+    """
+    content = "---\ntype: slides\n---\n\n"  # frontmatter
+    within_slide = False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not within_slide and not line.startswith("##"):
+            pass
+        elif line.startswith("##"):
+            within_slide = True
+            title = f'# {" ".join(line.split()[1:])}'
+            content += f"{title}\n"
+        elif line.startswith("```yaml"):
+            i += 1
+            while not lines[i].startswith("```"):
+                i += 1
+        elif line.startswith("`@script"):
+            content += f"Notes: {lines[i+1]}"
+            i += 2
+            while i < len(lines) and not lines[i].startswith("---"):
+                content += f"{lines[i]}"
+                i += 1
+            if i < len(lines):
+                content += f"---\n"
+            within_slide = False
+        elif line.startswith("`@"):  # unused metadata
+            pass
+        elif within_slide and line.startswith("---"):
+            content += f"---\n"
+            within_slide = False
+        elif within_slide:
+            content += f"{line}"
+        i += 1
+    logging.debug(f"Done processing slide content")
+    return content
+
 
 def get_exercise(
-    n: int, n_chapter: int, lines: FileLines
+    n: int, n_chapter: int, lines: FileLines, basepaths: Tuple[Path]
 ) -> Tuple[Dict[Path, str], FileLines]:
     """
     Create a mapping of file paths to generated file contents.
@@ -18,12 +67,58 @@ def get_exercise(
     and there are no more lines.
 
     Args:
-        n:
-        n_chapter:
-        lines:
+        n (int): The exercise number
+        n_chapter (int): The chapter number.
+        lines (FileLines): Each line of the input file.
+        basepaths (Tuple[Path]): the input and output directories
 
     Returns:
 
     """
-    # TODO implement
-    return {}, []
+    basepath_in, basepath_out = basepaths
+    chapter_path = basepath_out.joinpath("chapters", f"chapter{n_chapter}.md")
+    processed = {chapter_path: ""}
+    e_title, e_type = None, None
+    read_next_line_as_slide_hash = False
+    look_for_type = False
+    for i_line, line in enumerate(lines):
+        if line.startswith("##"):
+            e_title = " ".join(line.split()[1:]).strip()
+        elif line.startswith("---"):
+            processed[chapter_path] += f"</exercise>\n"
+            break
+        elif line.startswith("```yaml"):
+            look_for_type = True
+        elif look_for_type and line.startswith("```"):
+            look_for_type = False
+        elif look_for_type and line.startswith("type:"):
+            e_type_dc = line.split()[1].lower()
+            if e_type_dc in exercise_types:
+                e_type = exercise_types[e_type_dc]
+                processed[
+                    chapter_path
+                ] += f'<exercise id="{n}" title="{e_title}" type="{e_type}">\n'
+            else:
+                processed[chapter_path] += f'<exercise id="{n}" title="{e_title}">\n'
+            look_for_type = False
+        elif e_type == "slides" and line.startswith("`@projector_key`"):
+            read_next_line_as_slide_hash = True
+        elif e_type == "slides" and read_next_line_as_slide_hash:
+            hash_ = line.strip()
+            slides_input_path = next(
+                p
+                for p in basepath_in.joinpath("slides").glob("*.md")
+                if hash_ in str(p)
+            )
+            with open(slides_input_path) as f:
+                slides_lines = f.readlines()
+            slides_source = f"chapter{n_chapter}_{n}"
+            slides_path = basepath_out.joinpath("slides", f"{slides_source}.md")
+            processed[slides_path] = get_slides(slides_lines)
+            processed[chapter_path] += f'<slides source="{slides_source}"></slides>\n'
+            read_next_line_as_slide_hash = False
+        else:
+            pass  # TODO: process non-slides exercise content
+
+    logging.debug(f"Done processing exerise {n} or chapter {n_chapter}")
+    return processed, lines[(i_line + 1) :]
