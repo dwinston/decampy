@@ -7,7 +7,7 @@ from decampy.chapters import create_chapter
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Converts DataCamp repos to the format of https://github.com/ines/course-starter-python"
+        description="Convert DataCamp repos to the format of ines/course-starter-python"
     )
     parser.add_argument(
         "inrepo", type=str, help="Input (DataCamp) repo with chapters and slides"
